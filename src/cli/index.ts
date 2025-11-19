@@ -11,7 +11,15 @@ export interface AnalyzeOptions {
   until?: string
   allTime?: boolean
   year?: string
-  self?: boolean
+  self?: boolean // 统计当前 Git 用户
+  author?: string // 指定作者（名称或邮箱的部分匹配）
+  excludeAuthors?: string // 排除作者列表（逗号分隔，名称或邮箱的部分匹配）
+  merge?: boolean // 合并同名不同邮箱的作者
+  weekendSpanThreshold?: string // 周末真正加班跨度阈值（小时）
+  weekendCommitThreshold?: string // 周末真正加班最少提交数阈值
+  weekdayOvertimeMode?: 'commits' | 'days' | 'both' // 工作日加班展示模式
+  endHour?: string // 自定义下班时间（24小时制，例如 18 表示18点）
+  repos?: string // 多个仓库路径（逗号分隔，用于综合分析）
 }
 
 export class CLIManager {
@@ -33,6 +41,7 @@ export class CLIManager {
     // 注册根命令默认行为，直接执行分析逻辑
     this.setupDefaultAnalyzeAction()
     this.addTrendCommand()
+    this.addRankingCommand()
     this.addHelpCommand()
 
     // 错误处理
@@ -47,7 +56,20 @@ export class CLIManager {
       .option('-u, --until <date>', '结束日期 (YYYY-MM-DD)')
       .option('-y, --year <year>', '指定年份或年份范围 (例如: 2025 或 2023-2025)')
       .option('--all-time', '查询所有时间的数据（默认为最近一年）')
-      .option('--self', '仅统计当前 Git 用户的提交')
+      .option('--self', '仅统计当前 Git 用户的提交 (author 的快捷方式)')
+      .option('--author <name>', '仅统计指定作者（支持名称或邮箱部分匹配）')
+      .option(
+        '--exclude-authors <names>',
+        '排除作者（逗号分隔，支持名称或邮箱部分匹配，适用于排除 bot/CI 等自动化账号）'
+      )
+      .option('--weekend-span-threshold <hours>', '周末真正加班的最小时跨度（小时，默认 3）')
+      .option('--weekend-commit-threshold <count>', '周末真正加班的最少提交次数（默认 3）')
+      .option(
+        '--weekday-overtime-mode <mode>',
+        '工作日加班展示模式 commits|days|both（默认 both）'
+      )
+      .option('--end-hour <hour>', '自定义下班时间（24小时制，例如 18，用于更精确的加班分级）')
+      .option('--repos <paths>', '多个仓库路径（逗号分隔，用于综合分析多个项目）')
       .action(async (repoPath: string | undefined, options: AnalyzeOptions, command: Command) => {
         const processedArgs = typeof repoPath === 'string' ? 1 : 0
         const extraArgs = (command.args ?? []).slice(processedArgs)
@@ -60,8 +82,14 @@ export class CLIManager {
         }
 
         const mergedOptions = this.mergeGlobalOptions(options)
-        const targetPath = this.resolveTargetPath(repoPath, this.program.name())
-        await this.handleAnalyze(targetPath, mergedOptions)
+        
+        // 如果提供了 --repos 参数,则使用多仓库模式
+        if (mergedOptions.repos) {
+          await this.handleAnalyzeMultiple(mergedOptions)
+        } else {
+          const targetPath = this.resolveTargetPath(repoPath, this.program.name())
+          await this.handleAnalyze(targetPath, mergedOptions)
+        }
       })
   }
 
@@ -73,7 +101,21 @@ export class CLIManager {
       .option('-u, --until <date>', '结束日期 (YYYY-MM-DD)')
       .option('-y, --year <year>', '指定年份或年份范围 (例如: 2025 或 2023-2025)')
       .option('--all-time', '查询所有时间的数据')
-      .option('--self', '仅统计当前 Git 用户的提交')
+      .option('--self', '仅统计当前 Git 用户的提交 (author 的快捷方式)')
+      .option('--author <name>', '仅统计指定作者（支持名称或邮箱部分匹配）')
+      .option(
+        '--exclude-authors <names>',
+        '排除作者（逗号分隔，支持名称或邮箱部分匹配，适用于排除 bot/CI 等自动化账号）'
+      )
+      .option('--merge', '合并同名不同邮箱的作者')
+      .option('--weekend-span-threshold <hours>', '周末真正加班的最小时跨度（小时，默认 3）')
+      .option('--weekend-commit-threshold <count>', '周末真正加班的最少提交次数（默认 3）')
+      .option(
+        '--weekday-overtime-mode <mode>',
+        '工作日加班展示模式 commits|days|both（默认 both）'
+      )
+      .option('--end-hour <hour>', '自定义下班时间（24小时制，例如 18，用于更精确的加班分级）')
+      .option('--repos <paths>', '多个仓库路径（逗号分隔，用于综合分析多个项目）')
       .argument('[repoPath]', 'Git 仓库根目录路径（默认当前目录）')
       .action(async (repoPath: string | undefined, options: AnalyzeOptions, command: Command) => {
         const processedArgs = typeof repoPath === 'string' ? 1 : 0
@@ -91,6 +133,48 @@ export class CLIManager {
       })
 
     this.program.addCommand(trendCmd)
+  }
+
+  /** 注册 ranking 命令，统计所有提交者的996指数并排序 */
+  private addRankingCommand(): void {
+    const rankingCmd = new Command('ranking')
+      .description('统计排序所有提交者的996指数（卷王排行榜）')
+      .option('-s, --since <date>', '开始日期 (YYYY-MM-DD)')
+      .option('-u, --until <date>', '结束日期 (YYYY-MM-DD)')
+      .option('-y, --year <year>', '指定年份或年份范围 (例如: 2025 或 2023-2025)')
+      .option('--all-time', '查询所有时间的数据')
+      .option('--self', '仅统计当前 Git 用户的提交 (author 的快捷方式)')
+      .option('--author <name>', '仅统计指定作者（支持名称或邮箱部分匹配）')
+      .option(
+        '--exclude-authors <names>',
+        '排除作者（逗号分隔，支持名称或邮箱部分匹配，适用于排除 bot/CI 等自动化账号）'
+      )
+      .option('--merge', '合并同名不同邮箱的作者')
+      .option('--weekend-span-threshold <hours>', '周末真正加班的最小时跨度（小时，默认 3）')
+      .option('--weekend-commit-threshold <count>', '周末真正加班的最少提交次数（默认 3）')
+      .option(
+        '--weekday-overtime-mode <mode>',
+        '工作日加班展示模式 commits|days|both（默认 both）'
+      )
+      .option('--end-hour <hour>', '自定义下班时间（24小时制，例如 18，用于更精确的加班分级）')
+      .option('--repos <paths>', '多个仓库路径（逗号分隔，用于综合分析多个项目）')
+      .argument('[repoPath]', 'Git 仓库根目录路径（默认当前目录）')
+      .action(async (repoPath: string | undefined, options: any, command: Command) => {
+        const processedArgs = typeof repoPath === 'string' ? 1 : 0
+        const extraArgs = (command.args ?? []).slice(processedArgs)
+
+        if (extraArgs.length > 0) {
+          const invalid = extraArgs[0]
+          console.error(chalk.red(`错误: 未知命令 '${invalid}'`))
+          console.log('运行 code996 help 查看可用命令')
+          process.exit(1)
+        }
+
+        const targetPath = this.resolveTargetPath(repoPath, `${this.program.name()} ranking`)
+        await this.handleRanking(targetPath, options)
+      })
+
+    this.program.addCommand(rankingCmd)
   }
 
   /** 注册 help 命令，提供统一的帮助入口 */
@@ -126,12 +210,28 @@ export class CLIManager {
     printGlobalNotices()
   }
 
+  /** 处理多仓库分析流程 */
+  private async handleAnalyzeMultiple(options: AnalyzeOptions): Promise<void> {
+    const { AnalyzeExecutor } = await import('./commands/analyze')
+    await AnalyzeExecutor.executeMultiple(options)
+    printGlobalNotices()
+  }
+
   /** 处理趋势分析流程的执行逻辑，targetPath 为已校验的 Git 根目录 */
   private async handleTrend(targetPath: string, options: AnalyzeOptions): Promise<void> {
     // 导入trend命令并执行
     const mergedOptions = this.mergeGlobalOptions(options)
     const { TrendExecutor } = await import('./commands/trend')
     await TrendExecutor.execute(targetPath, mergedOptions)
+    printGlobalNotices()
+  }
+
+  /** 处理排名分析流程的执行逻辑，targetPath 为已校验的 Git 根目录 */
+  private async handleRanking(targetPath: string, options: any): Promise<void> {
+    // 导入ranking命令并执行
+    const mergedOptions = this.mergeGlobalOptions(options)
+    const { RankingExecutor } = await import('./commands/ranking')
+    await RankingExecutor.execute(targetPath, mergedOptions)
     printGlobalNotices()
   }
 
@@ -145,6 +245,14 @@ export class CLIManager {
       since: options.since ?? globalOpts.since,
       until: options.until ?? globalOpts.until,
       year: options.year ?? globalOpts.year,
+      author: options.author ?? (globalOpts as any).author,
+      excludeAuthors: options.excludeAuthors ?? (globalOpts as any).excludeAuthors,
+      merge: options.merge ?? (globalOpts as any).merge,
+      weekendSpanThreshold: options.weekendSpanThreshold ?? (globalOpts as any).weekendSpanThreshold,
+      weekendCommitThreshold: options.weekendCommitThreshold ?? (globalOpts as any).weekendCommitThreshold,
+      weekdayOvertimeMode: options.weekdayOvertimeMode ?? (globalOpts as any).weekdayOvertimeMode,
+      endHour: options.endHour ?? (globalOpts as any).endHour,
+      repos: options.repos ?? (globalOpts as any).repos,
     }
   }
 
@@ -221,6 +329,7 @@ ${chalk.bold('使用方法:')}
 
 ${chalk.bold('命令:')}
   trend             查看月度996指数和工作时间的变化趋势
+  ranking           统计排序所有提交者的996指数（卷王排行榜）
   help              显示帮助信息
 
 ${chalk.bold('全局选项:')}
@@ -232,10 +341,20 @@ ${chalk.bold('分析选项:')}
   -u, --until <date>      结束日期 (YYYY-MM-DD)
   -y, --year <year>       指定年份或年份范围 (例如: 2025 或 2023-2025)
   --all-time              查询所有时间的数据（覆盖整个仓库历史）
-  --self                  仅统计当前 Git 用户的提交
+  --self                  仅统计当前 Git 用户的提交 (author 的快捷方式)
+  --author <str>          仅统计指定作者（支持名称或邮箱部分匹配）
+  --exclude-authors <ls>  排除作者（逗号分隔，支持名称或邮箱部分匹配，排除 bot/CI 等）
+  --merge                 合并同名不同邮箱的作者（用于 ranking/trend）
+  --weekend-span-threshold <h>   周末真正加班的最小时跨度（小时，默认 3）
+  --weekend-commit-threshold <n> 周末真正加班的最少提交次数（默认 3）
+  --weekday-overtime-mode <mode> 工作日加班展示模式 commits|days|both（默认 both）
+  --end-hour <hour>              自定义下班时间（24小时制，例如 18，用于更精确的加班分级）
+  --repos <paths>                多个仓库路径（逗号分隔，用于综合分析多个项目）
 
 ${chalk.bold('默认策略:')}
   自动以最后一次提交为基准，回溯365天进行分析
+  周末真正加班：同时满足跨度>=weekend-span-threshold 且 提交数>=weekend-commit-threshold
+  工作日加班：提交次数统计使用下班后整点提交；加班天数统计使用最后一次提交时间 >= 推测下班时间
 
 ${chalk.bold('示例:')}
   ${chalk.gray('# 基础分析')}
@@ -249,6 +368,20 @@ ${chalk.bold('示例:')}
   code996 trend                 # 分析最近一年的月度趋势
   code996 trend -y 2024         # 分析2024年各月趋势
   code996 trend --all-time      # 分析所有时间的月度趋势
+
+  ${chalk.gray('# 卷王排行榜')}
+  code996 ranking               # 查看所有提交者的996指数排名
+  code996 ranking -y 2024       # 查看2024年的排名
+  code996 ranking --author 张三  # 查看指定作者的详细信息
+  code996 ranking --exclude-authors bot,CI  # 排除机器人
+  code996 ranking --merge       # 合并同名不同邮箱的作者统计
+
+  ${chalk.gray('# 自定义下班时间与加班分级')}
+  code996 --end-hour 18         # 设置18点下班，自动分析加班严重程度
+  code996 --end-hour 19 -y 2025 # 设置19点下班分析2025年
+
+  ${chalk.gray('# 多仓库综合分析')}
+  code996 --repos "/path/repo1,/path/repo2"  # 合并多个仓库统计
 
 ${chalk.bold('更多详情请访问:')} https://github.com/code996/code996
     `)

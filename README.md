@@ -22,19 +22,19 @@ code996 是一个分析工具，它可以统计 Git 项目的 commit 时间分�
 
 ### 查看核心结果
 
-<img src="https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo1.png" alt="核心结果预览" style="width:600px; max-width:100%; height:auto;"/>
+![核心结果预览](https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo1.png)
 
 ### 查看提交时间分布
 
-<img src="https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo2.png" alt="提交时间分布图" style="width:400px; max-width:100%; height:auto;"/>
+![提交时间分布图](https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo2.png)
 
 ### 加班情况分析
 
-<img src="https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo3.png" alt="加班情况分析图" style="width:600px; max-width:100%; height:auto;"/>
+![加班情况分析图](https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo3.png)
 
 ### 综合建议
 
-<img src="https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo4.png" alt="综合建议图" style="width:600px; max-width:100%; height:auto;"/>
+![综合建议图](https://raw.githubusercontent.com/hellodigua/code996/main/public/images/demo4.png)
 
 ## 🚀 快速开始
 
@@ -60,6 +60,7 @@ code996
 ### 基础命令与选项
 
 - `multi`：分析多个 Git 仓库，汇总展示整体996指数和月度趋势（包含11列完整趋势表）
+- `ranking`：统计排序所有提交者的996指数（卷王排行榜）🆕
 - `help`：显示帮助信息
 
 #### 时间范围选项
@@ -73,7 +74,15 @@ code996
 
 #### 筛选与展示选项
 
-- `--self`：仅统计当前 Git 用户的提交记录
+- `--self`：仅统计当前 Git 用户的提交记录（等价于自动推断对应的 `--author`）
+- `--author <name>`：仅统计指定作者的提交（支持名称或邮箱部分匹配，适用于所有命令）🆕
+- `--exclude-authors <names>`：排除指定作者（逗号分隔，支持名称或邮箱部分匹配，适用于所有命令，可用于排除 bot/CI）🆕
+- `--merge`：合并同名不同邮箱的作者统计（适用于 `ranking` 和 `trend` 命令）🆕
+- `--weekend-span-threshold <hours>`：周末"真正加班"最小时间跨度（小时，默认 3，需与提交次数共同满足）🆕
+- `--weekend-commit-threshold <count>`：周末"真正加班"最少提交次数（默认 3）🆕
+- `--weekday-overtime-mode <mode>`：工作日加班分布视角：`commits`（下班后提交次数）| `days`（加班天数）| `both`（默认，同时展示）🆕
+- `--end-hour <hour>`：自定义下班时间（24小时制，例如 18，用于更精确的加班严重程度分级）🆕
+- `--repos <paths>`：多个仓库路径（逗号分隔，用于综合分析多个项目）🆕
 - `-H, --hours <range>`：手动指定标准工作时间（例如：9-18 或 9.5-18.5）
 - `--half-hour`：以半小时粒度展示时间分布（默认按小时展示）
 
@@ -93,6 +102,38 @@ code996 --all-time
 # 仅分析当前用户的提交记录
 code996 --self
 code996 --self -y 2025         # 分析自己在2025年的提交
+code996 trend --self            # 查看自己的趋势分析
+
+
+
+# 🆕 查看卷王排行榜
+code996 ranking                # 查看所有提交者的996指数排名
+code996 ranking -y 2024        # 查看2024年的排名
+code996 ranking --author 张三   # 查看指定作者的详细信息
+code996 ranking --exclude-authors bot,CI  # 排除机器人账号
+
+# 🆕 过滤示例（同样适用于 trend / 基础分析）
+code996 --author alice         # 只看 alice 的整体分析
+code996 trend --exclude-authors bot,CI,dependabot  # 趋势分析中排除自动化账号
+
+# 🆕 周末加班阈值与工作日展示模式
+code996 --weekend-span-threshold 4 --weekend-commit-threshold 5  # 将真正加班判定调严
+code996 --weekday-overtime-mode days  # 仅用加班天数视角，弱化提交频率差异
+
+# 🆕 自定义下班时间与加班分级
+code996 --end-hour 18         # 设置18点下班，自动分析加班严重程度
+code996 --end-hour 19 -y 2025 # 设置19点下班分析2025年
+# 分级标准：轻度(2h内)、中度(2-4h)、重度(4-6h)、极度(6h以上)
+
+# 🆕 多仓库综合分析
+code996 --repos "/path/repo1,/path/repo2"  # 合并多个仓库统计
+code996 --repos "D:\project1,D:\project2" --end-hour 18  # 支持与其他参数组合
+
+# 🆕 合并同名作者（处理一人多邮箱的情况）
+code996 ranking --merge        # 自动合并同名不同邮箱的作者
+code996 ranking --merge --exclude-authors jenkins  # 合并作者并排除机器人
+code996 trend --merge -y 2025  # 查看合并后的月度趋势
+
 
 # 多仓库分析（自动包含月度趋势分析）
 code996 multi                  # 扫描当前目录所有子目录，自动展示趋势分析
@@ -114,6 +155,49 @@ code996 -y 2025 --half-hour    # 结合年份分析，精细展示
 code996 multi --half-hour      # 多仓库分析，半小时粒度展示
 ```
 
+
+### 适用场景
+
+- **个人开发者**：综合评估在多个项目中的总工作量
+- **团队管理**：了解团队在多个项目线的整体加班情况
+- **项目对比**：结合单仓库分析，识别不同项目的工作强度差异
+
+## 🔄 作者合并功能
+
+在实际项目中，同一个开发者可能使用不同的邮箱或名称提交代码（例如个人邮箱、公司邮箱、不同电脑的配置等）。`--merge` 选项可以智能识别并合并这些身份的统计数据。
+
+### 合并规则
+
+- **按名称分组**：工具会按照作者名称（不区分大小写）进行分组
+- **智能去重**：同一名称下的不同邮箱会被识别为同一作者
+- **主身份选择**：自动选择提交数最多的邮箱作为主身份
+- **数据合并**：将所有身份的提交数、996指数、加班率等指标合并计算
+
+### 使用场景
+
+```bash
+# 场景1: 发现排行榜中有重复的同名作者
+code996 ranking --all-time
+# 输出：jinxin (586 commits), jinxin3 (586 commits) ← 疑似同一人
+
+code996 ranking --all-time --merge
+# 输出：jinxin3 (1172 commits) ← 已合并
+
+# 场景2: 排除机器人后合并真实作者
+code996 ranking --exclude-authors bot,ci,jenkins --merge
+
+# 场景3: 查看合并后的趋势变化
+code996 trend --merge -y 2024
+```
+
+### 效果对比
+
+| 功能 | 不使用 --merge | 使用 --merge |
+|------|----------------|--------------|
+| 作者数量 | 14 | 7 |
+| 数据准确性 | 分散到多个身份 | 聚合为真实个人 |
+| 排名准确性 | 可能低估真实贡献 | 反映真实工作量 |
+
 > 💡 **半小时粒度功能说明**：
 >
 > - 默认模式按小时展示（如 09:00, 10:00），更简洁清晰
@@ -128,7 +212,7 @@ code996 multi --half-hour      # 多仓库分析，半小时粒度展示
 
 ### 数据采集流程
 
-```
+```text
 Git 仓库 → git log 采集 → 日级首提 + 小时分布 → 分位数推算上/下班 → 996 指数计算 → 结果输出
 ```
 
@@ -142,6 +226,44 @@ Git 仓库 → git log 采集 → 日级首提 + 小时分布 → 分位数推�
 3. **996 指数计算**：依据加班比例构建指数，并输出中文描述
 4. **数据验证**：检验统计数据是否与总提交数一致，避免缺失导致的偏差
 5. **算法优势**：新版本采用分位数与拐点估算，能更智能地排除深夜零星提交的干扰，精准定位真实的工作时间窗口
+
+## 📊 指标定义
+
+### 加班率 (overTimeRadio)
+
+- 百分比数值，8 表示 8%。
+- 公式：`ceil( ( x + (y * n) / (m + n) ) / (x + y) * 100 )`
+  - x: 工作日下班后提交数
+  - y: 工作日工作时间提交数
+  - m: 工作日总提交数
+  - n: 周末总提交数
+- 周末修正项 `(y * n)/(m + n)` 将周末工作折算为等效加班提交，抑制零星周末噪声。
+- 低工作量补偿：若初算结果为 0 且样本小时 < 9，则使用 `getUn996Radio` 返回负值代表工作不饱和度（例如 -88）。
+- 解释：
+  - >=0：真实加班强度占比
+  - <0：工作产能低于标准 9 小时，绝不是“倒贴加班”而是“不饱和”。
+- 展示：统一加百分号；负值可标注为“工作不饱和”。
+
+### 996 指数 (index996)
+
+- 计算：`index996 = overTimeRadio * 3`
+- 标准 996 加班率约 37.5%，乘 3 约等于 100，使 100 成为 996 的近似标尺。
+
+### 作者加班率 (AuthorStats.overTimeRadio)
+
+- 语义与公式与整体一致，按单一作者的提交数据独立重算。
+- 合并作者 (`--merge`) 时重新聚合 m/n/x/y 后再计算，避免直接平均导致偏差。
+
+### 负值场景说明
+
+- 条件：工作日样本小时 < 9 且加班提交为 0。
+- 计算：`ceil( totalCount / (averagePerHour * 9) * 100 ) - 100` → 与标准 9 小时产能差异。
+- 建议呈现文案：`工作不饱和 -88%`。
+
+### 数值规范
+
+- 不再二次 *100；内部存储即百分比。
+- 所有外部展示追加 `%`；除分析文字外不显示小数 >1 位。
 
 ## 使用提示
 

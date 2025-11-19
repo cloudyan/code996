@@ -4,6 +4,7 @@ import { GitCollector } from '../../git/git-collector'
 import { TrendAnalyzer } from '../../core/trend-analyzer'
 import { printTrendReport } from './report/trend-printer'
 import { AnalyzeOptions } from '../index'
+import { buildAuthorFilter } from '../common/author-filter'
 import { calculateTimeRange } from '../../utils/terminal'
 import { GitLogOptions } from '../../types/git-types'
 import { ensureCommitSamples } from '../common/commit-guard'
@@ -27,12 +28,16 @@ export class TrendExecutor {
       console.log(chalk.blue('📅 时间范围:'), `${since} 至 ${until}`)
       console.log()
 
+      // 作者过滤（统一处理 self/author/exclude-authors）
       let authorPattern: string | undefined
-      if (options.self) {
-        const authorInfo = await collector.resolveSelfAuthor(path)
-        authorPattern = authorInfo.pattern
-        console.log(chalk.blue('🙋 作者过滤:'), authorInfo.displayLabel)
-        console.log()
+      try {
+        const built = await buildAuthorFilter(collector, path, since, until, options)
+        authorPattern = built.pattern
+        built.infoLines.forEach((l) => console.log(l))
+        if (built.infoLines.length) console.log()
+      } catch (e) {
+        console.error(chalk.red('❌ 作者过滤失败:'), (e as Error).message)
+        process.exit(1)
       }
 
       // 构造采样参数，确保 commit 过滤条件与趋势统计一致
@@ -41,6 +46,7 @@ export class TrendExecutor {
         since,
         until,
         authorPattern,
+        silent: false,
       }
 
       // 趋势分析同样需要足够的样本量
@@ -75,8 +81,9 @@ export class TrendExecutor {
   ): Promise<{ since: string; until: string }> {
     // 全时间范围
     if (options.allTime) {
-      const firstCommit = await collector.getFirstCommitDate({ path })
-      const lastCommit = await collector.getLastCommitDate({ path })
+      const baseOpts: GitLogOptions = { path, since: '1970-01-01', until: '2100-01-01', silent: true, authorPattern: undefined }
+      const firstCommit = await collector.getFirstCommitDate(baseOpts)
+      const lastCommit = await collector.getLastCommitDate(baseOpts)
 
       if (!firstCommit || !lastCommit) {
         throw new Error('无法获取仓库的提交历史时间范围')
@@ -118,7 +125,8 @@ export class TrendExecutor {
 
     // 默认：基于最后一次提交回溯365天
     try {
-      const lastCommitDate = await collector.getLastCommitDate({ path })
+      const baseOpts: GitLogOptions = { path, since: '1970-01-01', until: '2100-01-01', silent: true, authorPattern: undefined }
+      const lastCommitDate = await collector.getLastCommitDate(baseOpts)
       if (lastCommitDate) {
         const until = lastCommitDate
         const untilDate = new Date(lastCommitDate)

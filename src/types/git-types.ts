@@ -1,19 +1,19 @@
 export interface GitLogOptions {
   path: string
-  since?: string
-  until?: string
-  silent?: boolean // 静默模式，不打印日志
-  authorPattern?: string // 作者过滤正则
+  since: string | undefined
+  until: string | undefined
+  silent: boolean | undefined // 静默模式，不打印日志
+  authorPattern: string | undefined // 作者过滤正则
 }
 
 export interface GitLogData {
   byHour: TimeCount[]
   byDay: TimeCount[]
   totalCommits: number
-  dailyFirstCommits?: DailyFirstCommit[]
-  dayHourCommits?: DayHourCommit[]
-  dailyLatestCommits?: DailyLatestCommit[]
-  dailyCommitHours?: DailyCommitHours[]
+  dailyFirstCommits: DailyFirstCommit[] | undefined
+  dayHourCommits: DayHourCommit[] | undefined
+  dailyLatestCommits: DailyLatestCommit[] | undefined
+  dailyCommitHours: DailyCommitHours[] | undefined
 }
 
 export interface TimeCount {
@@ -45,11 +45,11 @@ export interface ParsedGitData {
   totalCommits: number
   workHourPl: WorkTimePl
   workWeekPl: WorkWeekPl
-  detectedWorkTime?: WorkTimeDetectionResult
-  dailyFirstCommits?: DailyFirstCommit[]
-  weekdayOvertime?: WeekdayOvertimeDistribution
-  weekendOvertime?: WeekendOvertimeDistribution
-  lateNightAnalysis?: LateNightAnalysis
+  detectedWorkTime: WorkTimeDetectionResult | undefined
+  dailyFirstCommits: DailyFirstCommit[] | undefined
+  weekdayOvertime: WeekdayOvertimeDistribution | undefined
+  weekendOvertime: WeekendOvertimeDistribution | undefined
+  lateNightAnalysis: LateNightAnalysis | undefined
 }
 
 export type WorkTimePl = [{ time: '工作' | '加班'; count: number }, { time: '工作' | '加班'; count: number }]
@@ -71,6 +71,18 @@ export interface WorkTimeData {
 export interface Result996 {
   index996: number
   index996Str: string
+  /**
+   * 加班率（百分比，数值本身代表 %，例如 8 表示 8 而不是 0.08）
+   * 计算公式：ceil( ( x + (y * n) / (m + n) ) / (x + y) * 100 )
+   *   x = 工作日加班时间段提交次数（工作日下班后）
+   *   y = 工作日正常工作时间段提交次数（推断出的工作窗口内）
+   *   m = 工作日所有提交次数
+   *   n = 周末所有提交次数
+   * 周末修正：将周末的工作按 (y * n)/(m + n) 折算为等效“加班提交”并与 x 相加，弱化周末少量零散提交的噪声。
+   * 负值含义：初算加班率为 0 且样本小时数 < 9 时，表示工作量极低，会调用 getUn996Radio 推算“工作不饱和度”，返回一个负百分比（例如 -88 表示比标准 9 小时产能低 88%）。
+   * 取值范围：正常 >= 0 且 <= 100；仅在低样本低工作量场景可能出现 < 0。
+   * 展示规范：输出中统一追加 '%'；负值代表“工作不饱和”而非加班。
+   */
   overTimeRadio: number
 }
 
@@ -92,7 +104,13 @@ export interface DailyLatestCommit {
  */
 export interface DailyCommitHours {
   date: string
-  hours: Set<number> // 该天所有提交的小时（去重）
+  hours: Set<number> // 该天所有提交的小时（去重,保留用于兼容旧逻辑:工作日加班提交次数统计）
+  /** 当天首次提交距离午夜的分钟数（用于精确计算跨度） */
+  firstMinutes: number | undefined
+  /** 当天最后一次提交距离午夜的分钟数（用于精确计算跨度与加班判定） */
+  lastMinutes: number | undefined
+  /** 当天提交总次数（精确，不仅仅是不同小时的数量） */
+  commitCount: number | undefined
 }
 
 /**
@@ -113,8 +131,23 @@ export interface WeekdayOvertimeDistribution {
   wednesday: number
   thursday: number
   friday: number
-  peakDay?: string // 加班最多的一天
-  peakCount?: number // 加班最多的次数
+  peakDay: string | undefined // 加班最多的一天
+  peakCount: number | undefined // 加班最多的次数
+  /** 加班天数（存在至少一次下班后提交） */
+  mondayDays: number | undefined
+  tuesdayDays: number | undefined
+  wednesdayDays: number | undefined
+  thursdayDays: number | undefined
+  fridayDays: number | undefined
+  /** 总的工作日加班天数 */
+  totalOvertimeDays: number | undefined
+  /** 加班严重程度分级（需配置自定义下班时间 --end-hour） */
+  severityLevels: {
+    light: number // 轻度加班天数（下班后 2小时内）
+    moderate: number // 中度加班天数（2-4小时）
+    severe: number // 重度加班天数（4-6小时）
+    extreme: number // 极度加班天数（6小时以上）
+  } | undefined
 }
 
 /**
@@ -123,8 +156,16 @@ export interface WeekdayOvertimeDistribution {
 export interface WeekendOvertimeDistribution {
   saturdayDays: number // 周六加班天数
   sundayDays: number // 周日加班天数
-  casualFixDays: number // 临时修复天数（提交1-2次）
-  realOvertimeDays: number // 真正加班天数（提交>=3次）
+  casualFixDays: number // 临时修复天数（跨度 < 阈值 或 提交数 < 阈值）
+  realOvertimeDays: number // 真正加班天数（跨度>=spanThreshold 且 提交数>=commitThreshold）
+  /** 周末活跃天数（出现过至少一次提交） */
+  activeWeekendDays: number | undefined
+  /** 时间范围内的总周末天数（用于计算渗透率） */
+  totalWeekendDays: number | undefined
+  /** 真正加班周末天数 / 总周末天数 * 100 */
+  realOvertimeRate: number | undefined
+  /** 周末活跃天数 / 总周末天数 * 100 */
+  weekendActivityRate: number | undefined
 }
 
 /**
@@ -181,5 +222,38 @@ export interface TrendAnalysisResult {
     avgIndex996: number
     avgWorkSpan: number
     trend: 'increasing' | 'decreasing' | 'stable' // 整体趋势
+  }
+}
+
+/**
+ * 作者统计数据
+ */
+export interface AuthorStats {
+  name: string // 作者名字
+  email: string // 作者邮箱
+  totalCommits: number // 总提交数
+  index996: number // 996指数
+  index996Str: string // 996指数描述
+  /**
+   * 个人加班率（与 Result996.overTimeRadio 语义与公式一致）
+   * 已按该作者的工作日 / 周末分布独立计算；数值为百分比（8 表示 8%）。
+   * 低工作量且无加班样本时可能出现负值，表示工作不饱和度。
+   */
+  overTimeRadio: number
+  workingHourCommits: number // 工作时间提交数
+  overtimeCommits: number // 加班时间提交数
+  weekdayCommits: number // 工作日提交数
+  weekendCommits: number // 周末提交数
+}
+
+/**
+ * 作者排名结果
+ */
+export interface AuthorRankingResult {
+  authors: AuthorStats[]
+  totalAuthors: number
+  timeRange: {
+    since: string | undefined
+    until: string | undefined
   }
 }
