@@ -11,6 +11,7 @@ export interface AnalyzeOptions {
   until?: string
   allTime?: boolean
   year?: string
+  days?: number
   self?: boolean
 }
 
@@ -46,6 +47,7 @@ export class CLIManager {
       .option('-s, --since <date>', '开始日期 (YYYY-MM-DD)')
       .option('-u, --until <date>', '结束日期 (YYYY-MM-DD)')
       .option('-y, --year <year>', '指定年份或年份范围 (例如: 2025 或 2023-2025)')
+      .option('-d, --days <number>', '指定最近 N 天的数据')
       .option('--all-time', '查询所有时间的数据（默认为最近一年）')
       .option('--self', '仅统计当前 Git 用户的提交')
       .action(async (repoPath: string | undefined, options: AnalyzeOptions, command: Command) => {
@@ -72,6 +74,7 @@ export class CLIManager {
       .option('-s, --since <date>', '开始日期 (YYYY-MM-DD)')
       .option('-u, --until <date>', '结束日期 (YYYY-MM-DD)')
       .option('-y, --year <year>', '指定年份或年份范围 (例如: 2025 或 2023-2025)')
+      .option('-d, --days <number>', '指定最近 N 天的数据')
       .option('--all-time', '查询所有时间的数据')
       .option('--self', '仅统计当前 Git 用户的提交')
       .argument('[repoPath]', 'Git 仓库根目录路径（默认当前目录）')
@@ -145,6 +148,7 @@ export class CLIManager {
       since: options.since ?? globalOpts.since,
       until: options.until ?? globalOpts.until,
       year: options.year ?? globalOpts.year,
+      days: options.days ?? globalOpts.days,
     }
   }
 
@@ -231,6 +235,7 @@ ${chalk.bold('分析选项:')}
   -s, --since <date>      开始日期 (YYYY-MM-DD)
   -u, --until <date>      结束日期 (YYYY-MM-DD)
   -y, --year <year>       指定年份或年份范围 (例如: 2025 或 2023-2025)
+  -d, --days <number>     指定最近 N 天的数据
   --all-time              查询所有时间的数据（覆盖整个仓库历史）
   --self                  仅统计当前 Git 用户的提交
 
@@ -243,11 +248,14 @@ ${chalk.bold('示例:')}
   code996 --since 2024-01-01    # 从指定日期开始
   code996 -y 2025               # 分析2025年整年
   code996 -y 2023-2025          # 分析2023-2025年
+  code996 -d 30                 # 分析最近30天
+  code996 --days 90             # 分析最近90天
   code996 --all-time            # 分析所有时间
 
   ${chalk.gray('# 趋势分析')}
   code996 trend                 # 分析最近一年的月度趋势
   code996 trend -y 2024         # 分析2024年各月趋势
+  code996 trend -d 30           # 分析最近30天的月度趋势
   code996 trend --all-time      # 分析所有时间的月度趋势
 
 ${chalk.bold('更多详情请访问:')} https://github.com/code996/code996

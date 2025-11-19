@@ -4,6 +4,7 @@ import { GitCollector } from '../../git/git-collector'
 import { GitParser } from '../../git/git-parser'
 import { AnalyzeOptions } from '../index'
 import { calculateTimeRange } from '../../utils/terminal'
+import { calculateDaysRange, parseYearOption } from '../../utils/date-parser'
 import { GitLogData, GitLogOptions, ParsedGitData, Result996 } from '../../types/git-types'
 import {
   printCoreResults,
@@ -150,6 +151,20 @@ async function resolveTimeRange({
     }
   }
 
+  // 处理 --days 参数
+  if (options.days) {
+    const daysNum = typeof options.days === 'string' ? parseInt(options.days, 10) : options.days
+    const daysRange = calculateDaysRange(daysNum)
+    if (daysRange) {
+      return {
+        since: daysRange.since,
+        until: daysRange.until,
+        mode: 'custom',
+        note: daysRange.note,
+      }
+    }
+  }
+
   // 处理 --year 参数
   if (options.year) {
     const yearRange = parseYearOption(options.year)
@@ -214,53 +229,6 @@ async function resolveAuthorFilter(collector: GitCollector, path: string): Promi
     pattern: authorInfo.pattern,
     displayLabel: authorInfo.displayLabel,
   }
-}
-
-/** 解析 --year 参数，支持单年和年份范围 */
-function parseYearOption(yearStr: string): { since: string; until: string; note?: string } | null {
-  // 去除空格
-  yearStr = yearStr.trim()
-
-  // 匹配年份范围格式：2023-2025
-  const rangeMatch = yearStr.match(/^(\d{4})-(\d{4})$/)
-  if (rangeMatch) {
-    const startYear = parseInt(rangeMatch[1], 10)
-    const endYear = parseInt(rangeMatch[2], 10)
-
-    // 验证年份合法性
-    if (startYear < 1970 || endYear < 1970 || startYear > endYear) {
-      console.error(chalk.red('❌ 年份格式错误: 起始年份不能大于结束年份，且年份必须 >= 1970'))
-      process.exit(1)
-    }
-
-    return {
-      since: `${startYear}-01-01`,
-      until: `${endYear}-12-31`,
-      note: `${startYear}-${endYear}年`,
-    }
-  }
-
-  // 匹配单年格式：2025
-  const singleMatch = yearStr.match(/^(\d{4})$/)
-  if (singleMatch) {
-    const year = parseInt(singleMatch[1], 10)
-
-    // 验证年份合法性
-    if (year < 1970) {
-      console.error(chalk.red('❌ 年份格式错误: 年份必须 >= 1970'))
-      process.exit(1)
-    }
-
-    return {
-      since: `${year}-01-01`,
-      until: `${year}-12-31`,
-      note: `${year}年`,
-    }
-  }
-
-  // 格式不正确
-  console.error(chalk.red('❌ 年份格式错误: 请使用 YYYY 格式（如 2025）或 YYYY-YYYY 格式（如 2023-2025）'))
-  process.exit(1)
 }
 
 function toUTCDate(dateStr: string): Date {

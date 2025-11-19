@@ -5,6 +5,7 @@ import { TrendAnalyzer } from '../../core/trend-analyzer'
 import { printTrendReport } from './report/trend-printer'
 import { AnalyzeOptions } from '../index'
 import { calculateTimeRange } from '../../utils/terminal'
+import { calculateDaysRange, parseYearOption } from '../../utils/date-parser'
 import { GitLogOptions } from '../../types/git-types'
 import { ensureCommitSamples } from '../common/commit-guard'
 
@@ -88,9 +89,21 @@ export class TrendExecutor {
       }
     }
 
+    // 天数参数
+    if (options.days) {
+      const daysNum = typeof options.days === 'string' ? parseInt(options.days, 10) : options.days
+      const daysRange = calculateDaysRange(daysNum)
+      if (daysRange) {
+        return {
+          since: daysRange.since,
+          until: daysRange.until,
+        }
+      }
+    }
+
     // 年份参数
     if (options.year) {
-      const yearRange = this.parseYearOption(options.year)
+      const yearRange = parseYearOption(options.year)
       if (yearRange) {
         return {
           since: yearRange.since,
@@ -136,48 +149,5 @@ export class TrendExecutor {
       since: fallback.since,
       until: fallback.until,
     }
-  }
-
-  /**
-   * 解析年份参数
-   */
-  private static parseYearOption(yearStr: string): { since: string; until: string } | null {
-    yearStr = yearStr.trim()
-
-    // 年份范围格式：2023-2025
-    const rangeMatch = yearStr.match(/^(\d{4})-(\d{4})$/)
-    if (rangeMatch) {
-      const startYear = parseInt(rangeMatch[1], 10)
-      const endYear = parseInt(rangeMatch[2], 10)
-
-      if (startYear < 1970 || endYear < 1970 || startYear > endYear) {
-        console.error(chalk.red('❌ 年份格式错误: 起始年份不能大于结束年份，且年份必须 >= 1970'))
-        process.exit(1)
-      }
-
-      return {
-        since: `${startYear}-01-01`,
-        until: `${endYear}-12-31`,
-      }
-    }
-
-    // 单年格式：2025
-    const singleMatch = yearStr.match(/^(\d{4})$/)
-    if (singleMatch) {
-      const year = parseInt(singleMatch[1], 10)
-
-      if (year < 1970) {
-        console.error(chalk.red('❌ 年份格式错误: 年份必须 >= 1970'))
-        process.exit(1)
-      }
-
-      return {
-        since: `${year}-01-01`,
-        until: `${year}-12-31`,
-      }
-    }
-
-    console.error(chalk.red('❌ 年份格式错误: 请使用 "2025" 或 "2023-2025" 格式'))
-    process.exit(1)
   }
 }
