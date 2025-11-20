@@ -2,6 +2,7 @@ import { GitCollector } from '../git/git-collector'
 import { GitParser } from '../git/git-parser'
 import { calculate996Index } from './calculator'
 import { WorkSpanCalculator } from './work-span-calculator'
+import dayjs from '../utils/dayjs'
 import {
   TrendAnalysisResult,
   MonthlyTrendData,
@@ -163,18 +164,18 @@ export class TrendAnalyzer {
    */
   private static generateMonthsList(since: string, until: string): string[] {
     const months: string[] = []
-    const startDate = new Date(since)
-    const endDate = new Date(until)
+    const startDate = dayjs(since)
+    const endDate = dayjs(until)
 
-    let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+    let current = startDate.startOf('month')
 
-    while (current <= endDate) {
-      const year = current.getFullYear()
-      const month = String(current.getMonth() + 1).padStart(2, '0')
+    while (current.isSameOrBefore(endDate, 'month')) {
+      const year = current.year()
+      const month = String(current.month() + 1).padStart(2, '0')
       months.push(`${year}-${month}`)
 
       // 移动到下个月
-      current.setMonth(current.getMonth() + 1)
+      current = current.add(1, 'month')
     }
 
     return months
@@ -188,8 +189,8 @@ export class TrendAnalyzer {
   private static getMonthRange(month: string): { since: string; until: string } {
     const [year, monthNum] = month.split('-').map(Number)
 
-    const startDate = new Date(year, monthNum - 1, 1)
-    const endDate = new Date(year, monthNum, 0) // 当月最后一天
+    const startDate = dayjs(`${year}-${monthNum}-01`)
+    const endDate = startDate.endOf('month')
 
     const since = this.formatDate(startDate)
     const until = this.formatDate(endDate)
@@ -200,11 +201,8 @@ export class TrendAnalyzer {
   /**
    * 格式化日期为 YYYY-MM-DD
    */
-  private static formatDate(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+  private static formatDate(date: dayjs.Dayjs): string {
+    return date.format('YYYY-MM-DD')
   }
 
   /**

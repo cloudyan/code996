@@ -1,5 +1,6 @@
 import chalk from 'chalk'
 import ora from 'ora'
+import dayjs from '../../utils/dayjs'
 import { GitCollector } from '../../git/git-collector'
 import { TrendAnalyzer } from '../../core/trend-analyzer'
 import { printTrendReport } from './report/trend-printer'
@@ -129,9 +130,8 @@ export class TrendExecutor {
       const lastCommitDate = await collector.getLastCommitDate(baseOpts)
       if (lastCommitDate) {
         const until = lastCommitDate
-        const untilDate = new Date(lastCommitDate)
-        untilDate.setFullYear(untilDate.getFullYear() - 1)
-        const since = untilDate.toISOString().split('T')[0]
+        const sinceDate = dayjs(lastCommitDate).subtract(1, 'year')
+        const since = sinceDate.format('YYYY-MM-DD')
         return { since, until }
       }
     } catch {

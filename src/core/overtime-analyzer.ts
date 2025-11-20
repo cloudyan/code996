@@ -8,6 +8,7 @@ import {
   DailyLatestCommit,
   DailyCommitHours,
 } from '../types/git-types'
+import dayjs from '../utils/dayjs'
 
 /**
  * 加班分析器
@@ -74,8 +75,8 @@ export class OvertimeAnalyzer {
 
     if (dailyCommitHours && dailyCommitHours.length > 0) {
       for (const day of dailyCommitHours) {
-        const dateObj = new Date(day.date)
-        const dow = dateObj.getDay() // 0=Sun .. 6=Sat
+        const dayjsDate = dayjs(day.date)
+        const dow = dayjsDate.day() // 0=Sun .. 6=Sat
         if (dow < 1 || dow > 5) continue
         // 精确判定：最后一次提交分钟 >= endHour*60 视为加班天
         const lastMinutes = day.lastMinutes
@@ -175,8 +176,8 @@ export class OvertimeAnalyzer {
     let realOvertimeDays = 0
 
     for (const { date, hours, firstMinutes, lastMinutes, commitCount } of dailyCommitHours) {
-      const commitDate = new Date(date)
-      const dayOfWeek = commitDate.getDay() // 0=Sunday, 6=Saturday
+      const commitDate = dayjs(date)
+      const dayOfWeek = commitDate.day() // 0=Sunday, 6=Saturday
       if (dayOfWeek !== 0 && dayOfWeek !== 6) continue
 
       // 计算真实跨度（小时）
@@ -204,28 +205,28 @@ export class OvertimeAnalyzer {
     // 计算时间范围内总周末天数
     let totalWeekendDays: number | undefined
     if (config?.since && config?.until) {
-      const sinceDate = new Date(config.since)
-      const untilDate = new Date(config.until)
-      let cursor = new Date(sinceDate.getTime())
+      const sinceDate = dayjs(config.since)
+      const untilDate = dayjs(config.until)
+      let cursor = sinceDate
       let count = 0
-      while (cursor.getTime() <= untilDate.getTime()) {
-        const dow = cursor.getDay()
+      while (cursor.isSameOrBefore(untilDate, 'day')) {
+        const dow = cursor.day()
         if (dow === 0 || dow === 6) count++
-        cursor.setDate(cursor.getDate() + 1)
+        cursor = cursor.add(1, 'day')
       }
       totalWeekendDays = count
     } else if (dailyCommitHours.length > 0) {
       const firstDay = dailyCommitHours[0]
       const lastDay = dailyCommitHours[dailyCommitHours.length - 1]
       if (firstDay !== undefined && lastDay !== undefined) {
-        const minDate = new Date(firstDay.date)
-        const maxDate = new Date(lastDay.date)
-        let cursor = new Date(minDate.getTime())
+        const minDate = dayjs(firstDay.date)
+        const maxDate = dayjs(lastDay.date)
+        let cursor = minDate
         let count = 0
-        while (cursor.getTime() <= maxDate.getTime()) {
-          const dow = cursor.getDay()
+        while (cursor.isSameOrBefore(maxDate, 'day')) {
+          const dow = cursor.day()
           if (dow === 0 || dow === 6) count++
-          cursor.setDate(cursor.getDate() + 1)
+          cursor = cursor.add(1, 'day')
         }
         totalWeekendDays = count
       }
@@ -297,8 +298,8 @@ export class OvertimeAnalyzer {
     // 排除周末（需要解析日期）
     const workDaysSet = new Set<string>()
     for (const commit of dailyFirstCommits) {
-      const date = new Date(commit.date)
-      const dayOfWeek = date.getDay() // 0=Sunday, 1=Monday, ..., 6=Saturday
+      const date = dayjs(commit.date)
+      const dayOfWeek = date.day() // 0=Sunday, 1=Monday, ..., 6=Saturday
       // 只统计周一到周五
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         workDaysSet.add(commit.date)
@@ -314,10 +315,9 @@ export class OvertimeAnalyzer {
     let totalMonths = 0
 
     if (since && until) {
-      const sinceDate = new Date(since)
-      const untilDate = new Date(until)
-      const diffTime = Math.abs(untilDate.getTime() - sinceDate.getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      const sinceDate = dayjs(since)
+      const untilDate = dayjs(until)
+      const diffDays = untilDate.diff(sinceDate, 'day')
 
       totalWeeks = Math.max(1, Math.floor(diffDays / 7))
       totalMonths = Math.max(1, Math.floor(diffDays / 30))

@@ -1,5 +1,6 @@
 import { DailyFirstCommit, TimeCount, WorkTimeDetectionResult } from '../types/git-types'
 import { detectEndHourWindow } from './end-hour-detector'
+import dayjs from '../utils/dayjs'
 
 /**
  * 工作时间分析器
@@ -80,7 +81,7 @@ export class WorkTimeAnalyzer {
         return false
       }
 
-      const weekDay = new Date(`${item.date}T00:00:00Z`).getUTCDay()
+      const weekDay = dayjs.utc(item.date).day()
       return weekDay >= 1 && weekDay <= 5
     })
   }

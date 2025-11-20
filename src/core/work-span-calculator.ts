@@ -1,4 +1,5 @@
 import { DailyWorkSpan } from '../types/git-types'
+import dayjs from '../utils/dayjs'
 
 /**
  * 工作跨度计算器
@@ -19,9 +20,9 @@ export class WorkSpanCalculator {
     const commitsByDate = new Map<string, number[]>() // date -> minutes from midnight
 
     for (const commit of commits) {
-      const date = new Date(commit.timestamp * 1000)
+      const date = dayjs(commit.timestamp * 1000)
       const dateStr = this.formatDate(date)
-      const minutesFromMidnight = date.getHours() * 60 + date.getMinutes()
+      const minutesFromMidnight = date.hour() * 60 + date.minute()
 
       if (!commitsByDate.has(dateStr)) {
         commitsByDate.set(dateStr, [])
@@ -108,11 +109,8 @@ export class WorkSpanCalculator {
   /**
    * 格式化日期为 YYYY-MM-DD
    */
-  private static formatDate(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+  private static formatDate(date: dayjs.Dayjs): string {
+    return date.format('YYYY-MM-DD')
   }
 
   /**

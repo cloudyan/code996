@@ -1,4 +1,5 @@
 import Table from 'cli-table3'
+import dayjs from './dayjs'
 
 /**
  * 获取终端宽度，设置合理范围
@@ -27,13 +28,12 @@ export function calculateTimeRange(allTime: boolean = false): { since: string; u
     }
   }
 
-  const today = new Date()
-  const oneYearAgo = new Date()
-  oneYearAgo.setFullYear(today.getFullYear() - 1)
+  const today = dayjs()
+  const oneYearAgo = today.subtract(1, 'year')
 
   // 格式化为YYYY-MM-DD
-  const since = oneYearAgo.toISOString().split('T')[0] as string
-  const until = today.toISOString().split('T')[0] as string
+  const since = oneYearAgo.format('YYYY-MM-DD')
+  const until = today.format('YYYY-MM-DD')
 
   return { since, until }
 }

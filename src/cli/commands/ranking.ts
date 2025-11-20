@@ -1,5 +1,6 @@
 import chalk from 'chalk'
 import ora from 'ora'
+import dayjs from '../../utils/dayjs'
 import { GitCollector } from '../../git/git-collector'
 import { GitParser } from '../../git/git-parser'
 import { AnalyzeOptions } from '../index'
@@ -316,13 +317,12 @@ async function resolveTimeRange({
       authorPattern: undefined,
     })
     if (lastCommitDate) {
-      const untilDate = new Date(lastCommitDate)
-      const sinceDate = new Date(untilDate)
-      sinceDate.setDate(sinceDate.getDate() - 365)
+      const untilDate = dayjs(lastCommitDate)
+      const sinceDate = untilDate.subtract(365, 'day')
 
       return {
-        since: sinceDate.toISOString().split('T')[0],
-        until: untilDate.toISOString().split('T')[0],
+        since: sinceDate.format('YYYY-MM-DD'),
+        until: untilDate.format('YYYY-MM-DD'),
       }
     }
   } catch {
@@ -330,13 +330,12 @@ async function resolveTimeRange({
   }
 
   // 默认最近一年
-  const until = new Date()
-  const since = new Date(until)
-  since.setDate(since.getDate() - 365)
+  const until = dayjs()
+  const since = until.subtract(365, 'day')
 
   return {
-    since: since.toISOString().split('T')[0],
-    until: until.toISOString().split('T')[0],
+    since: since.format('YYYY-MM-DD'),
+    until: until.format('YYYY-MM-DD'),
   }
 }
 

@@ -1,5 +1,6 @@
 import chalk from 'chalk'
 import ora from 'ora'
+import dayjs from '../../utils/dayjs'
 import { GitCollector } from '../../git/git-collector'
 import { GitParser } from '../../git/git-parser'
 import { buildAuthorFilter } from '../common/author-filter'
@@ -327,12 +328,16 @@ async function resolveTimeRange({
     const lastCommitDate = await collector.getLastCommitDate(baseOptions)
     if (lastCommitDate) {
       const untilDate = toUTCDate(lastCommitDate)
-      const sinceDate = new Date(untilDate.getTime())
-      sinceDate.setUTCDate(sinceDate.getUTCDate() - 365)
+      const sinceDate = untilDate.subtract(365, 'day')
 
-      const baseline = Date.UTC(1970, 0, 1)
-      if (sinceDate.getTime() < baseline) {
-        sinceDate.setTime(baseline)
+      // 确保开始日期不早于1970年
+      if (sinceDate.isBefore(dayjs('1970-01-01'))) {
+        return {
+          since: '1970-01-01',
+          until: formatUTCDate(untilDate),
+          mode: 'auto-last-commit',
+          note: '以最后一次提交为基准回溯365天',
+        }
       }
 
       return {
@@ -410,16 +415,12 @@ function parseYearOption(yearStr: string): { since: string; until: string; note?
   process.exit(1)
 }
 
-function toUTCDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map((value) => parseInt(value, 10))
-  return new Date(Date.UTC(year, (month || 1) - 1, day || 1))
+function toUTCDate(dateStr: string): dayjs.Dayjs {
+  return dayjs.utc(dateStr)
 }
 
-function formatUTCDate(date: Date): string {
-  const year = date.getUTCFullYear()
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function formatUTCDate(date: dayjs.Dayjs): string {
+  return date.format('YYYY-MM-DD')
 }
 
 /** 输出核心结果、时间分布与统计信息 */
