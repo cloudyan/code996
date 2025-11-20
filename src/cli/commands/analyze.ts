@@ -18,6 +18,7 @@ import {
   printRecommendation,
 } from './report'
 import { ensureCommitSamples } from '../common/commit-guard'
+import { resolveTimeRange } from '../common/time-range'
 
 type TimeRangeMode = 'all-time' | 'custom' | 'auto-last-commit' | 'fallback'
 
@@ -58,7 +59,7 @@ export class AnalyzeExecutor {
         until: effectiveUntil,
         mode: rangeMode,
         note: rangeNote,
-      } = await resolveTimeRange({ collector, path: repoPaths[0], options })
+      } = await resolveTimeRange(collector, repoPaths[0], options)
 
       // 显示分析开始信息
       console.log(chalk.blue('🔍 多仓库综合分析'))
@@ -161,7 +162,7 @@ export class AnalyzeExecutor {
         until: effectiveUntil,
         mode: rangeMode,
         note: rangeNote,
-      } = await resolveTimeRange({ collector, path, options })
+      } = await resolveTimeRange(collector, path, options)
 
       // 显示分析开始信息
       console.log(chalk.blue('🔍 分析仓库:'), path || process.cwd())
@@ -275,87 +276,7 @@ export class AnalyzeExecutor {
   }
 }
 
-interface ResolveTimeRangeParams {
-  collector: GitCollector
-  path: string
-  options: AnalyzeOptions
-  debug?: boolean
-}
 
-async function resolveTimeRange({
-  collector,
-  path,
-  options,
-}: ResolveTimeRangeParams): Promise<{ since?: string; until?: string; mode: TimeRangeMode; note?: string }> {
-  if (options.allTime) {
-    // --all-time 时不传 since 和 until，让 git 返回所有数据
-    return {
-      mode: 'all-time',
-    }
-  }
-
-  // 处理 --year 参数
-  if (options.year) {
-    const yearRange = parseYearOption(options.year)
-    if (yearRange) {
-      return {
-        since: yearRange.since,
-        until: yearRange.until,
-        mode: 'custom',
-        note: yearRange.note,
-      }
-    }
-  }
-
-  if (options.since || options.until) {
-    const fallback = calculateTimeRange(false)
-    return {
-      since: options.since || fallback.since,
-      until: options.until || fallback.until,
-      mode: 'custom',
-    }
-  }
-
-  const baseOptions: GitLogOptions = {
-    path,
-    since: '1970-01-01',
-    until: '2100-01-01',
-    silent: true,
-    authorPattern: undefined,
-  }
-
-  try {
-    const lastCommitDate = await collector.getLastCommitDate(baseOptions)
-    if (lastCommitDate) {
-      const untilDate = toUTCDate(lastCommitDate)
-      const sinceDate = untilDate.subtract(365, 'day')
-
-      // 确保开始日期不早于1970年
-      if (sinceDate.isBefore(dayjs('1970-01-01'))) {
-        return {
-          since: '1970-01-01',
-          until: formatUTCDate(untilDate),
-          mode: 'auto-last-commit',
-          note: '以最后一次提交为基准回溯365天',
-        }
-      }
-
-      return {
-        since: formatUTCDate(sinceDate),
-        until: formatUTCDate(untilDate),
-        mode: 'auto-last-commit',
-        note: '以最后一次提交为基准回溯365天',
-      }
-    }
-  } catch {}
-
-  const fallback = calculateTimeRange(false)
-  return {
-    since: fallback.since,
-    until: fallback.until,
-    mode: 'fallback',
-  }
-}
 
 /**
  * 当启用 --self 时解析当前 Git 用户的信息，生成作者过滤正则

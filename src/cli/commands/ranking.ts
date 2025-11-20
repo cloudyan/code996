@@ -8,6 +8,7 @@ import { buildAuthorFilter } from '../common/author-filter'
 import { GitLogOptions, AuthorStats, AuthorRankingResult } from '../../types/git-types'
 import { ensureCommitSamples } from '../common/commit-guard'
 import { printAuthorRanking } from './report/ranking-printer'
+import { resolveTimeRange } from '../common/time-range'
 
 export interface RankingOptions extends AnalyzeOptions {
   author?: string // 指定统计某个作者
@@ -28,11 +29,7 @@ export class RankingExecutor {
       const collector = new GitCollector()
 
       // 计算时间范围（复用 analyze 命令的逻辑）
-      const { since: effectiveSince, until: effectiveUntil } = await resolveTimeRange({
-        collector,
-        path,
-        options,
-      })
+      const { since: effectiveSince, until: effectiveUntil } = await resolveTimeRange(collector, path, options)
 
       console.log(chalk.blue('🔍 分析仓库:'), path || process.cwd())
       if (effectiveSince && effectiveUntil) {
@@ -273,111 +270,4 @@ function mergeAuthorStats(
   return Array.from(merged.values())
 }
 
-/**
- * 解析时间范围（复用 analyze 命令的逻辑）
- */
-async function resolveTimeRange({
-  collector,
-  path,
-  options,
-}: {
-  collector: GitCollector
-  path: string
-  options: RankingOptions
-}): Promise<{ since?: string; until?: string }> {
-  if (options.allTime) {
-    return {}
-  }
 
-  // 处理 --year 参数
-  if (options.year) {
-    const yearRange = parseYearOption(options.year)
-    if (yearRange) {
-      return {
-        since: yearRange.since,
-        until: yearRange.until,
-      }
-    }
-  }
-
-  if (options.since || options.until) {
-    return {
-      since: options.since,
-      until: options.until,
-    }
-  }
-
-  // 默认回溯最后一次提交的365天
-  try {
-    const lastCommitDate = await collector.getLastCommitDate({ 
-      path,
-      since: '1970-01-01',
-      until: '2100-01-01',
-      silent: true,
-      authorPattern: undefined,
-    })
-    if (lastCommitDate) {
-      const untilDate = dayjs(lastCommitDate)
-      const sinceDate = untilDate.subtract(365, 'day')
-
-      return {
-        since: sinceDate.format('YYYY-MM-DD'),
-        until: untilDate.format('YYYY-MM-DD'),
-      }
-    }
-  } catch {
-    // 忽略错误，使用默认值
-  }
-
-  // 默认最近一年
-  const until = dayjs()
-  const since = until.subtract(365, 'day')
-
-  return {
-    since: since.format('YYYY-MM-DD'),
-    until: until.format('YYYY-MM-DD'),
-  }
-}
-
-/**
- * 解析 --year 参数
- */
-function parseYearOption(yearStr: string): { since: string; until: string } | null {
-  yearStr = yearStr.trim()
-
-  // 匹配年份范围格式：2023-2025
-  const rangeMatch = yearStr.match(/^(\d{4})-(\d{4})$/)
-  if (rangeMatch) {
-    const startYear = parseInt(rangeMatch[1], 10)
-    const endYear = parseInt(rangeMatch[2], 10)
-
-    if (startYear < 1970 || endYear < 1970 || startYear > endYear) {
-      console.error(chalk.red('❌ 年份格式错误: 起始年份不能大于结束年份，且年份必须 >= 1970'))
-      process.exit(1)
-    }
-
-    return {
-      since: `${startYear}-01-01`,
-      until: `${endYear}-12-31`,
-    }
-  }
-
-  // 匹配单年格式：2025
-  const singleMatch = yearStr.match(/^(\d{4})$/)
-  if (singleMatch) {
-    const year = parseInt(singleMatch[1], 10)
-
-    if (year < 1970) {
-      console.error(chalk.red('❌ 年份格式错误: 年份必须 >= 1970'))
-      process.exit(1)
-    }
-
-    return {
-      since: `${year}-01-01`,
-      until: `${year}-12-31`,
-    }
-  }
-
-  console.error(chalk.red('❌ 年份格式错误: 请使用 YYYY 格式（如 2025）或 YYYY-YYYY 格式（如 2023-2025）'))
-  process.exit(1)
-}

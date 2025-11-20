@@ -9,6 +9,7 @@ import { buildAuthorFilter } from '../common/author-filter'
 import { calculateTimeRange } from '../../utils/terminal'
 import { GitLogOptions } from '../../types/git-types'
 import { ensureCommitSamples } from '../common/commit-guard'
+import { resolveTimeRange as resolveTimeRangeCommon, parseYearOption } from '../common/time-range'
 
 /**
  * 趋势分析命令执行器
@@ -80,8 +81,12 @@ export class TrendExecutor {
     path: string,
     options: AnalyzeOptions
   ): Promise<{ since: string; until: string }> {
-    // 全时间范围
-    if (options.allTime) {
+    // 使用通用的时间范围解析函数
+    const result = await resolveTimeRangeCommon(collector, path, options);
+    
+    // 确保返回值包含必须的 since 和 until
+    if (result.mode === 'all-time') {
+      // 全时间范围需要获取仓库的实际首尾提交时间
       const baseOpts: GitLogOptions = { path, since: '1970-01-01', until: '2100-01-01', silent: true, authorPattern: undefined }
       const firstCommit = await collector.getFirstCommitDate(baseOpts)
       const lastCommit = await collector.getLastCommitDate(baseOpts)
@@ -95,97 +100,23 @@ export class TrendExecutor {
         until: lastCommit,
       }
     }
-
-    // 年份参数
-    if (options.year) {
-      const yearRange = this.parseYearOption(options.year)
-      if (yearRange) {
-        return {
-          since: yearRange.since,
-          until: yearRange.until,
-        }
-      }
-    }
-
-    // 自定义时间范围
-    if (options.since && options.until) {
+    
+    // 对于其他情况，如果 since 和 until 存在则直接返回，否则使用默认值
+    if (result.since && result.until) {
       return {
-        since: options.since,
-        until: options.until,
-      }
-    }
-
-    // 部分自定义时间范围（补全缺失的部分）
-    if (options.since || options.until) {
-      const fallback = calculateTimeRange(false)
+        since: result.since,
+        until: result.until,
+      };
+    } else {
+      // 默认最近一年
+      const until = dayjs();
+      const since = until.subtract(1, 'year');
       return {
-        since: options.since || fallback.since,
-        until: options.until || fallback.until,
-      }
-    }
-
-    // 默认：基于最后一次提交回溯365天
-    try {
-      const baseOpts: GitLogOptions = { path, since: '1970-01-01', until: '2100-01-01', silent: true, authorPattern: undefined }
-      const lastCommitDate = await collector.getLastCommitDate(baseOpts)
-      if (lastCommitDate) {
-        const until = lastCommitDate
-        const sinceDate = dayjs(lastCommitDate).subtract(1, 'year')
-        const since = sinceDate.format('YYYY-MM-DD')
-        return { since, until }
-      }
-    } catch {
-      // 失败则使用当前日期回溯
-    }
-
-    // 兜底：当前日期回溯365天
-    const fallback = calculateTimeRange(false)
-    return {
-      since: fallback.since,
-      until: fallback.until,
+        since: since.format('YYYY-MM-DD'),
+        until: until.format('YYYY-MM-DD'),
+      };
     }
   }
 
-  /**
-   * 解析年份参数
-   */
-  private static parseYearOption(yearStr: string): { since: string; until: string } | null {
-    yearStr = yearStr.trim()
 
-    // 年份范围格式：2023-2025
-    const rangeMatch = yearStr.match(/^(\d{4})-(\d{4})$/)
-    if (rangeMatch) {
-      const startYear = parseInt(rangeMatch[1], 10)
-      const endYear = parseInt(rangeMatch[2], 10)
-
-      if (startYear < 1970 || endYear < 1970 || startYear > endYear) {
-        console.error(chalk.red('❌ 年份格式错误: 起始年份不能大于结束年份，且年份必须 >= 1970'))
-        process.exit(1)
-      }
-
-      return {
-        since: `${startYear}-01-01`,
-        until: `${endYear}-12-31`,
-      }
-    }
-
-    // 单年格式：2025
-    const singleMatch = yearStr.match(/^(\d{4})$/)
-    if (singleMatch) {
-      const year = parseInt(singleMatch[1], 10)
-
-      if (year < 1970) {
-        console.error(chalk.red('❌ 年份格式错误: 年份必须 >= 1970'))
-        process.exit(1)
-      }
-
-      return {
-        since: `${year}-01-01`,
-        until: `${year}-12-31`,
-      }
-    }
-
-    console.error(chalk.red('❌ 年份格式错误: 请使用 "2025" 或 "2023-2025" 格式'))
-    process.exit(1)
-  }
 }
