@@ -409,7 +409,8 @@ export class GitCollector {
     this.applyCommonFilters(args, options)
 
     const output = await this.execGitCommand(args, path)
-    const lines = output.split('\\n').filter((line) => line.trim())
+    const lines = output.split('\n').filter((line) => line.trim())
+    // console.log('getFirstCommitDate', output, lines)
     return lines[0] || ''
   }
 
@@ -424,7 +425,8 @@ export class GitCollector {
     this.applyCommonFilters(args, options)
 
     const output = await this.execGitCommand(args, path)
-    const lines = output.split('\\n').filter((line) => line.trim())
+    const lines = output.split('\n').filter((line) => line.trim())
+    // console.log('getLastCommitDate', output, lines)
     return lines[0] || ''
   }
 
