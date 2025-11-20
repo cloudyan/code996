@@ -12,6 +12,7 @@ export interface RankingOptions extends AnalyzeOptions {
   author?: string // 指定统计某个作者
   excludeAuthors?: string // 排除某些作者（逗号分隔）
   merge?: boolean // 合并同名不同邮箱的作者
+  sortBy?: 'index' | 'overtime' | 'commits' | 'score' // 排序方式
 }
 
 /**
@@ -160,8 +161,41 @@ export class RankingExecutor {
         console.log(chalk.green(`✓ 已合并，最终作者数: ${authorStats.length}`))
       }
 
-      // 按 996 指数降序排序（卷王排行）
-      authorStats.sort((a, b) => b.index996 - a.index996)
+      // 按指定方式排序（卷王排行）
+      const sortBy = options.sortBy || 'score'; // 默认使用综合得分排序
+      
+      authorStats.sort((a, b) => {
+        switch (sortBy) {
+          case 'index': // 按996指数排序
+            return b.index996 - a.index996;
+          case 'overtime': // 按加班绝对次数排序
+            return b.overtimeCommits - a.overtimeCommits;
+          case 'commits': // 按总提交数排序
+            return b.totalCommits - a.totalCommits;
+          case 'score': // 按综合得分排序
+          default:
+            const scoreA = calculateRankingScore(a);
+            const scoreB = calculateRankingScore(b);
+            return scoreB - scoreA;
+        }
+      });
+
+      // 计算排名综合得分
+      function calculateRankingScore(stats: AuthorStats): number {
+        // 如果996指数为负值（工作不饱和），直接返回负值
+        if (stats.index996 < 0) {
+          return stats.index996;
+        }
+        
+        // 基础得分：996指数 * 样本量调整因子
+        const commitCountFactor = Math.min(1, Math.log10(Math.max(1, stats.totalCommits)) / 2);
+        const baseScore = stats.index996 * commitCountFactor;
+        
+        // 加班绝对次数权重
+        const overtimeWeight = Math.min(stats.overtimeCommits, 50) / 5;
+        
+        return baseScore + overtimeWeight;
+      }
 
       spinner.succeed('分析完成！')
       console.log()

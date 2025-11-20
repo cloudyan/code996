@@ -22,6 +22,11 @@ export interface AnalyzeOptions {
   repos?: string // 多个仓库路径（逗号分隔，用于综合分析）
 }
 
+// Ranking命令的选项扩展
+export interface RankingOptions extends AnalyzeOptions {
+  sortBy?: 'index' | 'overtime' | 'commits' | 'score' // 排序方式
+}
+
 export class CLIManager {
   private program: Command
 
@@ -158,6 +163,7 @@ export class CLIManager {
       )
       .option('--end-hour <hour>', '自定义下班时间（24小时制，例如 18，用于更精确的加班分级）')
       .option('--repos <paths>', '多个仓库路径（逗号分隔，用于综合分析多个项目）')
+      .option('--by <sort>', '排序方式: index(996指数)|overtime(加班次数)|commits(总提交数)|score(综合得分，默认)', 'score')
       .argument('[repoPath]', 'Git 仓库根目录路径（默认当前目录）')
       .action(async (repoPath: string | undefined, options: any, command: Command) => {
         const processedArgs = typeof repoPath === 'string' ? 1 : 0
@@ -230,8 +236,13 @@ export class CLIManager {
   private async handleRanking(targetPath: string, options: any): Promise<void> {
     // 导入ranking命令并执行
     const mergedOptions = this.mergeGlobalOptions(options)
+    // 处理sortBy选项
+    const rankingOptions: RankingOptions = {
+      ...mergedOptions,
+      sortBy: options.by as 'index' | 'overtime' | 'commits' | 'score' | undefined
+    }
     const { RankingExecutor } = await import('./commands/ranking')
-    await RankingExecutor.execute(targetPath, mergedOptions)
+    await RankingExecutor.execute(targetPath, rankingOptions)
     printGlobalNotices()
   }
 
@@ -375,6 +386,10 @@ ${chalk.bold('示例:')}
   code996 ranking --author 张三  # 查看指定作者的详细信息
   code996 ranking --exclude-authors bot,CI  # 排除机器人
   code996 ranking --merge       # 合并同名不同邮箱的作者统计
+  code996 ranking --by overtime # 按加班次数排序
+  code996 ranking --by commits  # 按总提交数排序
+  code996 ranking --by score    # 按综合得分排序（默认）
+  code996 ranking --by index    # 按996指数排序
 
   ${chalk.gray('# 自定义下班时间与加班分级')}
   code996 --end-hour 18         # 设置18点下班，自动分析加班严重程度

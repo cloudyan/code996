@@ -367,8 +367,6 @@ export class GitCollector {
     const email = await this.getGitConfigValue('user.email', path)
     const name = await this.getGitConfigValue('user.name', path)
 
-    
-  
     if (!email && !name) {
       throw new Error('启用 --self 需要先配置 git config user.name 或 user.email')
     }
@@ -406,6 +404,7 @@ export class GitCollector {
   public async getFirstCommitDate(options: GitLogOptions): Promise<string> {
     const { path } = options
 
+    // git log --format=%cd --date=format:%Y-%m-%d --reverse --max-parents=0
     const args = ['log', '--format=%cd', '--date=format:%Y-%m-%d', '--reverse', '--max-parents=0']
     this.applyCommonFilters(args, options)
 
@@ -420,6 +419,7 @@ export class GitCollector {
   public async getLastCommitDate(options: GitLogOptions): Promise<string> {
     const { path } = options
 
+    // git log --format=%cd --date=format:%Y-%m-%d -1
     const args = ['log', '--format=%cd', '--date=format:%Y-%m-%d', '-1']
     this.applyCommonFilters(args, options)
 
